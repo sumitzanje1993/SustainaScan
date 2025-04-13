@@ -53,6 +53,12 @@ else:
 # Convert to DataFrame
 df = pd.DataFrame(leads)
 
+# ✅ Graceful fail if classification is incomplete
+required_columns = {"lead_type", "lead_score", "location"}
+if not required_columns.issubset(df.columns):
+    st.error("🚫 Required fields are missing in the dataset. Please re-run scraping and classification.")
+    st.stop()
+
 # Sidebar filters
 st.sidebar.header("🎯 Filter Leads")
 lead_types = st.sidebar.multiselect("Lead Type", options=df["lead_type"].unique(), default=df["lead_type"].unique())
