@@ -15,32 +15,33 @@ st.markdown("Type the Instagram handle of an eco-friendly brand or influencer to
 # --- Session states ---
 if "show_2fa" not in st.session_state:
     st.session_state.show_2fa = False
-if "submitted" not in st.session_state:
-    st.session_state.submitted = False
+if "insta_2fa" not in st.session_state:
+    st.session_state.insta_2fa = ""
+if "last_run_success" not in st.session_state:
+    st.session_state.last_run_success = False
 
 # --- Inputs ---
-insta_handle = st.text_input("Instagram Handle", value=st.session_state.get("last_handle", ""))
-insta_username = st.text_input("Your Instagram Username", value=st.session_state.get("last_user", ""))
-insta_password = st.text_input("Your Instagram Password", type="password")
-max_users = st.slider("Max Followers to Scrape", 10, 100, 30)
+with st.form("scraper_form"):
+    insta_handle = st.text_input("Instagram Handle", value=st.session_state.get("last_handle", ""))
+    insta_username = st.text_input("Your Instagram Username", value=st.session_state.get("last_user", ""))
+    insta_password = st.text_input("Your Instagram Password", type="password")
+    max_users = st.slider("Max Followers to Scrape", 10, 100, 30)
 
-# Conditionally show 2FA input
-insta_2fa = ""
-if st.session_state.show_2fa:
-    insta_2fa = st.text_input("🔐 Enter 2FA Code (from your app)", type="password")
+    if st.session_state.show_2fa:
+        st.session_state.insta_2fa = st.text_input("🔐 2FA Code", value=st.session_state.insta_2fa, type="password")
 
-# --- Form submission ---
-if st.button("🚀 Start Scanning"):
+    run = st.form_submit_button("🚀 Start Scanning")
+
+# --- Logic ---
+if run:
     if not insta_handle or not insta_username or not insta_password:
         st.warning("Please fill in all required fields.")
     else:
         st.session_state.last_handle = insta_handle
         st.session_state.last_user = insta_username
-        st.session_state.submitted = True
 
-        # First check: 2FA detection
         if not st.session_state.show_2fa:
-            with st.spinner("🔐 Checking login credentials..."):
+            with st.spinner("🔐 Checking login..."):
                 result = check_login_only(insta_username, insta_password)
 
             if result == "2FA_REQUIRED":
@@ -53,7 +54,7 @@ if st.button("🚀 Start Scanning"):
             else:
                 st.session_state.show_2fa = False
 
-        # Proceed with scraping if 2FA already handled or added
+        # If 2FA already shown or passed
         try:
             with st.spinner("📥 Scraping followers..."):
                 scrape_followers_of_account(
@@ -61,7 +62,7 @@ if st.button("🚀 Start Scanning"):
                     max_users,
                     insta_username,
                     insta_password,
-                    insta_2fa if insta_2fa else None
+                    st.session_state.insta_2fa
                 )
 
             with st.spinner("🤖 Running classification and enrichment..."):
@@ -69,9 +70,8 @@ if st.button("🚀 Start Scanning"):
 
             st.success("✅ Done! Leads enriched.")
             st.info("➡️ Visit the 'dashboard' tab to explore and download leads.")
-
             st.session_state.show_2fa = False
-            st.session_state.submitted = False
+            st.session_state.insta_2fa = ""
 
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
