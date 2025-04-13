@@ -7,12 +7,13 @@ import os
 import openai
 from PIL import Image
 
-# ✅ Robust API key setup: works on Streamlit Cloud and locally
+# ✅ Robust API key setup: works both on Streamlit Cloud and local
 openai.api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
 
+# ✅ Page setup
 st.set_page_config(page_title="SustainaScan | Dashboard", layout="wide")
 
-# Background color (dark theme with light text readability)
+# ✅ Styling
 st.markdown("""
     <style>
     .stApp {
@@ -22,20 +23,19 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Logo
-logo_path = "./Greeco_logo_1.png"
+# ✅ Logo
+logo_path = "./data/Greeco_logo.png"
 if os.path.exists(logo_path):
-    logo = Image.open(logo_path)
-    st.image(logo, width=180)
+    st.image(Image.open(logo_path), width=180)
 
-st.title("SustainaScan | Lead Dashboard")
+# ✅ Title
+st.title("📊 SustainaScan | Lead Dashboard")
 st.markdown("Filter, view, and connect with your eco-minded audience below.")
 
-# Data paths
+# ✅ Load Data
 DATA_FILE = "./data/instagram_leads_enriched.json"
 CONTACTED_FILE = "./data/contacted_status.json"
 
-# Ensure file exists
 if not os.path.exists(DATA_FILE):
     st.warning("⚠️ No leads found. Please run a scrape first.")
     st.stop()
@@ -43,23 +43,16 @@ if not os.path.exists(DATA_FILE):
 with open(DATA_FILE, "r", encoding="utf-8") as f:
     leads = json.load(f)
 
-# Load or initialize contacted status
+# ✅ Load or create contacted status
 if os.path.exists(CONTACTED_FILE):
     with open(CONTACTED_FILE, "r", encoding="utf-8") as f:
         contacted_status = json.load(f)
 else:
     contacted_status = {}
 
-# Convert to DataFrame
 df = pd.DataFrame(leads)
 
-# ✅ Graceful fail if classification is incomplete
-required_columns = {"lead_type", "lead_score", "location"}
-if not required_columns.issubset(df.columns):
-    st.error("🚫 Required fields are missing in the dataset. Please re-run scraping and classification.")
-    st.stop()
-
-# Sidebar filters
+# ✅ Sidebar filters
 st.sidebar.header("🎯 Filter Leads")
 lead_types = st.sidebar.multiselect("Lead Type", options=df["lead_type"].unique(), default=df["lead_type"].unique())
 min_score, max_score = st.sidebar.slider("Lead Score", 1, 10, (5, 10))
@@ -73,7 +66,7 @@ filtered_df = df[
 
 st.success(f"✅ Found {len(filtered_df)} leads")
 
-# GPT message generator
+# ✅ GPT-based message generation
 def generate_message(username, lead_type, score):
     prompt = f"""
 You are a friendly marketer for an eco-business called Greeco Sustainable Living.
@@ -83,7 +76,7 @@ Lead username: {username}
 Lead type: {lead_type}
 Relevance score: {score}
 
-The tone should be:
+Tone:
 - Warm and approachable
 - Not salesy
 - Friendly and authentic
@@ -100,7 +93,7 @@ Return only the message.
     except Exception as e:
         return f"(Error generating message: {e})"
 
-# Display each lead
+# ✅ Display each lead
 updated_status = contacted_status.copy()
 
 for _, row in filtered_df.iterrows():
@@ -113,6 +106,8 @@ for _, row in filtered_df.iterrows():
         st.write(f"**Location:** {row['location']}")
 
         msg = generate_message(username, row['lead_type'], row['lead_score'])
+
+        # Unique key is important for Streamlit rendering
         st.text_area("✉️ Suggested Message", msg, height=100, key=f"msg_{username}")
 
         col1, col2, col3 = st.columns([1, 1, 1])
@@ -132,23 +127,23 @@ for _, row in filtered_df.iterrows():
             status = st.checkbox("✅ Mark as Contacted", value=contacted, key=f"check_{username}")
             updated_status[username] = status
 
-# Save updated contacted status
+# ✅ Save updated status
 with open(CONTACTED_FILE, "w", encoding="utf-8") as f:
     json.dump(updated_status, f, indent=2)
 
-# Export CSV
+# ✅ Export CSV
 filtered_df["message"] = filtered_df.apply(
     lambda row: generate_message(row["username"], row["lead_type"], row["lead_score"]), axis=1
 )
 filtered_df["contacted"] = filtered_df["username"].map(updated_status)
 
-csv = filtered_df[[
+csv = filtered_df[[  # exported columns
     "username", "full_name", "lead_type", "lead_score", "location",
     "email", "phone", "whatsapp", "profile_url", "message", "contacted"
 ]].to_csv(index=False)
 
 st.download_button(
-    label="📥 Download All Leads + Messages as CSV",
+    label="📥 Download Leads + Messages as CSV",
     data=csv,
     file_name='sustaina_leads_with_messages.csv',
     mime='text/csv',

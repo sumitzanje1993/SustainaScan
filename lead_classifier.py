@@ -1,59 +1,61 @@
-# llm_processing/lead_classifier.py
+# scraper_engine.py
 
-import openai
 import json
 import os
-from dotenv import load_dotenv
+import instaloader
+from lead_classifier import classify_leads
+from contact_extractor import enrich_contacts
 
-# Load OpenAI Key
-load_dotenv(dotenv_path="./config/secrets.env")
-openai.api_key = os.getenv("OPENAI_API_KEY")
+OUTPUT_FILE = "./data/instagram_raw_leads.json"
 
-INPUT_FILE = "./data/instagram_raw_leads.json"
-OUTPUT_FILE = "./data/instagram_leads_scored.json"
+def check_login_only(user: str, pwd: str):
+    L = instaloader.Instaloader()
+    try:
+        L.login(user, pwd)
+        return "LOGIN_SUCCESS"
+    except instaloader.exceptions.TwoFactorAuthRequiredException:
+        return "2FA_REQUIRED"
+    except Exception:
+        return "LOGIN_FAILED"
 
-def classify_leads():
-    with open(INPUT_FILE, "r") as f:
-        leads = json.load(f)
+def scrape_followers_of_account(target_username, max_users, login_user, login_pass, twofa_code=None):
+    L = instaloader.Instaloader()
+    try:
+        if twofa_code:
+            L.login(login_user, login_pass)
+            L.two_factor_login(twofa_code)
+        else:
+            L.login(login_user, login_pass)
+    except instaloader.exceptions.TwoFactorAuthRequiredException:
+        raise Exception("2FA_REQUIRED")
+    except Exception as e:
+        raise Exception(f"LOGIN_FAILED: {e}")
 
-    enriched = []
+    try:
+        profile = instaloader.Profile.from_username(L.context, target_username)
+    except Exception as e:
+        raise Exception(f"PROFILE_FETCH_FAILED: {e}")
 
-    for lead in leads:
-        prompt = f"""
-You are a helpful marketing AI. Analyze this Instagram user and respond in JSON format.
+    leads = []
+    for i, follower in enumerate(profile.get_followers()):
+        if i >= max_users:
+            break
+        leads.append({
+            "username": follower.username,
+            "full_name": follower.full_name,
+            "bio": follower.biography,
+            "followers": follower.followers,
+            "external_url": follower.external_url,
+            "profile_url": f"https://instagram.com/{follower.username}",
+            "lead_source": f"https://instagram.com/{target_username}"
+        })
 
-Username: {lead['username']}
-Bio: {lead['bio']}
-Followers: {lead['followers']}
-Full Name: {lead['full_name']}
-External URL: {lead['external_url']}
+    os.makedirs("data", exist_ok=True)
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+        json.dump(leads, f, indent=2)
 
-Classify this person with:
-- lead_type: Buyer / Influencer / Brand / Not Relevant
-- lead_score: Number from 1 (low) to 10 (very relevant)
-- location: If any city or place is mentioned in their bio
-"""
+    return OUTPUT_FILE
 
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3
-            )
-
-            ai_response = json.loads(response.choices[0].message.content.strip())
-            lead.update(ai_response)
-            enriched.append(lead)
-
-            print(f"[+] @{lead['username']} | Type: {ai_response['lead_type']} | Score: {ai_response['lead_score']}")
-
-        except Exception as e:
-            print(f"[!] Error processing {lead['username']}: {e}")
-
-    with open(OUTPUT_FILE, "w") as f:
-        json.dump(enriched, f, indent=2)
-
-    print(f"\n[✓] Saved enriched leads to {OUTPUT_FILE}")
-
-if __name__ == "__main__":
+def run_classification_and_enrichment():
     classify_leads()
+    enrich_contacts()

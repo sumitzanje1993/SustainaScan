@@ -1,4 +1,4 @@
-# llm_processing/contact_extractor.py
+# contact_extractor.py
 
 import json
 import re
@@ -6,11 +6,13 @@ import requests
 from bs4 import BeautifulSoup
 import os
 
+# File paths
 INPUT_FILE = "./data/instagram_leads_scored.json"
 OUTPUT_FILE = "./data/instagram_leads_enriched.json"
 
+# Regex patterns
 EMAIL_REGEX = r'[\w\.-]+@[\w\.-]+\.\w+'
-PHONE_REGEX = r'\+?\d[\d -]{8,}\d'
+PHONE_REGEX = r'\+?\d[\d \-]{8,}\d'
 WHATSAPP_REGEX = r'(wa\.me/\d+|api\.whatsapp\.com/send\?phone=\d+)'
 
 def extract_contacts_from_text(text):
@@ -33,17 +35,17 @@ def extract_from_website(url):
         pass
     return {}
 
-def enrich_leads_with_contacts():
+def enrich_contacts():
     if not os.path.exists(INPUT_FILE):
         print("[!] Scored leads file not found.")
         return
 
-    with open(INPUT_FILE, "r") as f:
+    with open(INPUT_FILE, "r", encoding="utf-8") as f:
         leads = json.load(f)
 
     enriched = []
     for lead in leads:
-        bio = lead.get("bio", "")
+        bio = lead.get("bio", "") or ""
         ext_url = lead.get("external_url")
 
         contacts = extract_contacts_from_text(bio)
@@ -54,15 +56,20 @@ def enrich_leads_with_contacts():
                 if not contacts.get(k) and website_contacts.get(k):
                     contacts[k] = website_contacts[k]
 
+        # Default fallback if none found
+        contacts["location"] = "India" if "india" in bio.lower() else "Global"
+
         lead.update(contacts)
         enriched.append(lead)
 
         print(f"[+] @{lead['username']} | Email: {contacts['email']} | Phone: {contacts['phone']} | WhatsApp: {contacts['whatsapp']}")
 
-    with open(OUTPUT_FILE, "w") as f:
+    os.makedirs("data", exist_ok=True)
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(enriched, f, indent=2)
 
     print(f"\n[✓] Saved enriched leads to {OUTPUT_FILE}")
 
+# Optional: run directly
 if __name__ == "__main__":
-    enrich_leads_with_contacts()
+    enrich_contacts()
