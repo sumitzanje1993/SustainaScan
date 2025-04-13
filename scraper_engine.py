@@ -22,13 +22,11 @@ def scrape_followers_of_account(target_username, max_users, login_user, login_pa
     L = instaloader.Instaloader()
 
     try:
-        # Initial login
-        L.context.log("🔐 Attempting login...")
-        L.login(login_user, login_pass)
+        if twofa_code:
+            # Inject 2FA handler into instaloader's input system
+            instaloader.TwoFactorAuthRequester.input = lambda self, prompt: twofa_code
 
-        # Handle 2FA if required
-        if L.context.is_logged_in and twofa_code:
-            L.two_factor_login(twofa_code)
+        L.login(login_user, login_pass)
 
     except instaloader.exceptions.TwoFactorAuthRequiredException:
         raise Exception("2FA_REQUIRED")
