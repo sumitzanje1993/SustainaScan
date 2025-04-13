@@ -12,25 +12,23 @@ def check_login_only(user: str, pwd: str, twofa_code: str = None):
     L = instaloader.Instaloader()
     try:
         L.login(user, pwd)
-        if twofa_code:
+        if L.context.is_logged_in and twofa_code:
             L.context.do_2fa_verification(twofa_code)
         return "LOGIN_SUCCESS"
     except instaloader.exceptions.TwoFactorAuthRequiredException:
         return "2FA_REQUIRED"
-    except Exception:
-        return "LOGIN_FAILED"
+    except Exception as e:
+        return f"LOGIN_FAILED: {str(e)}"
 
 def scrape_followers_of_account(target_username, max_users, login_user, login_pass, twofa_code=None):
     L = instaloader.Instaloader()
 
     try:
         L.login(login_user, login_pass)
-        if twofa_code:
+        if L.context.is_logged_in and twofa_code:
             L.context.do_2fa_verification(twofa_code)
     except instaloader.exceptions.TwoFactorAuthRequiredException:
         raise Exception("2FA_REQUIRED")
-    except instaloader.exceptions.BadCredentialsException:
-        raise Exception("LOGIN_FAILED: Bad username or password.")
     except Exception as e:
         raise Exception(f"LOGIN_FAILED: {e}")
 
