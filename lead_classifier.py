@@ -1,61 +1,79 @@
-# scraper_engine.py
+# lead_classifier.py
 
 import json
 import os
-import instaloader
-from lead_classifier import classify_leads
-from contact_extractor import enrich_contacts
+import openai
 
-OUTPUT_FILE = "./data/instagram_raw_leads.json"
-
-def check_login_only(user: str, pwd: str):
-    L = instaloader.Instaloader()
+# ✅ Load OpenAI key from secrets if running via Streamlit, else fallback to .env
+if os.getenv("STREAMLIT_RUN") == "1":
     try:
-        L.login(user, pwd)
-        return "LOGIN_SUCCESS"
-    except instaloader.exceptions.TwoFactorAuthRequiredException:
-        return "2FA_REQUIRED"
+        import streamlit as st
+        openai.api_key = st.secrets["OPENAI_API_KEY"]
     except Exception:
-        return "LOGIN_FAILED"
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+else:
+    from dotenv import load_dotenv
+    load_dotenv()
+    openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def scrape_followers_of_account(target_username, max_users, login_user, login_pass, twofa_code=None):
-    L = instaloader.Instaloader()
-    try:
-        if twofa_code:
-            L.login(login_user, login_pass)
-            L.two_factor_login(twofa_code)
-        else:
-            L.login(login_user, login_pass)
-    except instaloader.exceptions.TwoFactorAuthRequiredException:
-        raise Exception("2FA_REQUIRED")
-    except Exception as e:
-        raise Exception(f"LOGIN_FAILED: {e}")
 
-    try:
-        profile = instaloader.Profile.from_username(L.context, target_username)
-    except Exception as e:
-        raise Exception(f"PROFILE_FETCH_FAILED: {e}")
+# File paths
+INPUT_FILE = "./data/instagram_raw_leads.json"
+OUTPUT_FILE = "./data/instagram_leads_scored.json"
 
-    leads = []
-    for i, follower in enumerate(profile.get_followers()):
-        if i >= max_users:
-            break
-        leads.append({
-            "username": follower.username,
-            "full_name": follower.full_name,
-            "bio": follower.biography,
-            "followers": follower.followers,
-            "external_url": follower.external_url,
-            "profile_url": f"https://instagram.com/{follower.username}",
-            "lead_source": f"https://instagram.com/{target_username}"
-        })
+def classify_leads():
+    if not os.path.exists(INPUT_FILE):
+        print("[!] Raw leads file not found.")
+        return
 
-    os.makedirs("data", exist_ok=True)
+    with open(INPUT_FILE, "r", encoding="utf-8") as f:
+        leads = json.load(f)
+
+    scored_leads = []
+
+    for lead in leads:
+        username = lead.get("username", "unknown_user")
+        bio = lead.get("bio", "")
+        followers = lead.get("followers", 0)
+
+        prompt = f"""
+You are a smart assistant for a sustainable brand.
+Based on the Instagram bio and follower count, classify this user and assign a lead score (1-10).
+
+Bio: {bio}
+Followers: {followers}
+
+Return ONLY a valid JSON like this:
+{{
+  "lead_type": "Influencer / Eco-Buyer / Business / Other",
+  "lead_score": 1-10
+}}
+"""
+
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.4
+            )
+            result_text = response.choices[0].message.content.strip()
+            parsed = json.loads(result_text)
+
+            lead["lead_type"] = parsed.get("lead_type", "Other")
+            lead["lead_score"] = int(parsed.get("lead_score", 5))
+
+        except Exception as e:
+            print(f"[!] Error scoring @{username}: {e}")
+            lead["lead_type"] = "Unknown"
+            lead["lead_score"] = 1
+
+        scored_leads.append(lead)
+
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(leads, f, indent=2)
+        json.dump(scored_leads, f, indent=2)
 
-    return OUTPUT_FILE
+    print(f"[✓] Saved {len(scored_leads)} scored leads to {OUTPUT_FILE}")
 
-def run_classification_and_enrichment():
+
+if __name__ == "__main__":
     classify_leads()
-    enrich_contacts()
