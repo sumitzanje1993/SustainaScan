@@ -3,9 +3,8 @@
 import json
 import os
 import instaloader
-
-import lead_classifier
-import contact_extractor
+from lead_classifier import classify_leads
+from contact_extractor import enrich_contacts
 
 OUTPUT_FILE = "./data/instagram_raw_leads.json"
 
@@ -21,12 +20,16 @@ def check_login_only(user: str, pwd: str):
 
 def scrape_followers_of_account(target_username, max_users, login_user, login_pass, twofa_code=None):
     L = instaloader.Instaloader()
+
     try:
-        if twofa_code:
-            L.login(login_user, login_pass)
+        # Initial login
+        L.context.log("🔐 Attempting login...")
+        L.login(login_user, login_pass)
+
+        # Handle 2FA if required
+        if L.context.is_logged_in and twofa_code:
             L.two_factor_login(twofa_code)
-        else:
-            L.login(login_user, login_pass)
+
     except instaloader.exceptions.TwoFactorAuthRequiredException:
         raise Exception("2FA_REQUIRED")
     except Exception as e:
@@ -58,5 +61,5 @@ def scrape_followers_of_account(target_username, max_users, login_user, login_pa
     return OUTPUT_FILE
 
 def run_classification_and_enrichment():
-    lead_classifier.classify_leads()
-    contact_extractor.enrich_leads_with_contacts()
+    classify_leads()
+    enrich_contacts()
