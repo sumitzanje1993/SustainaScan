@@ -1,49 +1,70 @@
 # scraper_ui.py
 
 import streamlit as st
+import os
+import sys
 from scraper_engine import (
     check_login_only,
     scrape_followers_of_account,
-    run_classification_and_enrichment
+    run_classification_and_enrichment,
 )
-import time
 
-st.set_page_config(page_title="SustainaScan Scraper", layout="centered")
+# Set correct Python interpreter
+VENV_PYTHON = sys.executable
+
+# Page config
+st.set_page_config(page_title="SustainaScan | Scraper", layout="centered")
 
 st.title("🌿 SustainaScan: Smart Lead Finder for Greeco Sustainable Living")
-st.write("Type the Instagram handle of an eco-friendly brand or influencer to scan their followers.")
+st.markdown("Type the Instagram handle of an eco-friendly brand or influencer to scan their followers.")
 
-with st.form(key="scrape_form"):
-    target = st.text_input("Instagram Handle", help="The influencer or brand to scrape followers from")
-    username = st.text_input("Your Instagram Username")
-    password = st.text_input("Your Instagram Password", type="password")
-    twofa_code = st.text_input("🔐 Instagram 2FA Code (if asked)", type="password", help="Only if 2FA is triggered")
-    max_followers = st.slider("Max Followers to Scrape", min_value=10, max_value=100, value=30)
-    submit = st.form_submit_button("🚀 Start Scanning")
+# Session states
+if "show_2fa" not in st.session_state:
+    st.session_state.show_2fa = False
 
-if submit:
-    if not all([target, username, password]):
-        st.error("Please fill in all required fields.")
-        st.stop()
+# Form UI
+with st.form("scraper_form"):
+    insta_handle = st.text_input("Target Instagram Handle", placeholder="e.g. zerowastestore")
+    insta_username = st.text_input("Your Instagram Username")
+    insta_password = st.text_input("Your Instagram Password", type="password")
 
-    with st.spinner("🔐 Logging in..."):
-        login_result = check_login_only(username, password)
-        if login_result == "2FA_REQUIRED":
-            if not twofa_code:
-                st.warning("⚠️ 2FA is required. Please enter the code and resubmit.")
-                st.stop()
+    if st.session_state.show_2fa:
+        insta_2fa = st.text_input("Enter 2FA Code sent by Instagram")
+    else:
+        insta_2fa = ""
 
-    try:
-        with st.spinner("📸 Scraping followers..."):
-            scrape_followers_of_account(
-                target_username=target,
-                max_users=max_followers,
-                login_user=username,
-                login_pass=password,
-                twofa_code=twofa_code or None
-            )
-        with st.spinner("🤖 Classifying and enriching leads..."):
-            run_classification_and_enrichment()
-        st.success("✅ All done! Head to the dashboard to view your leads.")
-    except Exception as e:
-        st.error(f"❌ {e}")
+    max_users = st.slider("Max Followers to Scrape", 5, 100, 30)
+    run_button = st.form_submit_button("🚀 Start Scanning")
+
+# Logic
+if run_button:
+    if not insta_handle or not insta_username or not insta_password:
+        st.warning("⚠️ Please fill all required fields.")
+    else:
+        with st.spinner("🔐 Checking Instagram login..."):
+            login_check = check_login_only(insta_username, insta_password)
+
+        if login_check == "2FA_REQUIRED":
+            st.session_state.show_2fa = True
+            st.warning("📲 2FA Required! Please enter your code and submit again.")
+        elif login_check == "LOGIN_FAILED":
+            st.error("❌ Login failed. Please verify your credentials.")
+        elif login_check == "LOGIN_SUCCESS" or (st.session_state.show_2fa and insta_2fa.strip()):
+            try:
+                with st.spinner("🔍 Scraping & enriching leads..."):
+                    scrape_followers_of_account(
+                        target_username=insta_handle,
+                        max_users=max_users,
+                        login_user=insta_username,
+                        login_pass=insta_password,
+                        twofa_code=insta_2fa.strip() if insta_2fa else None
+                    )
+                    run_classification_and_enrichment()
+
+                st.success("✅ Done! Your leads are enriched.")
+                st.info("📊 Now switch to the **Dashboard** tab on the left to view results.")
+
+            except Exception as e:
+                st.error(f"❌ Scraping failed: {e}")
+        else:
+            st.error("❌ Unknown error occurred during login.")
