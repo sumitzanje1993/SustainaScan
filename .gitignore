@@ -1,0 +1,5 @@
+# 🔐 Keep secrets and local data safe
+.env
+.streamlit/secrets.toml
+data/
+__pycache__/
