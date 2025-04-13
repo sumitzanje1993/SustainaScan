@@ -6,11 +6,9 @@ import json
 import os
 import openai
 from PIL import Image
-from dotenv import load_dotenv
 
-# Load OpenAI key
-load_dotenv(dotenv_path="./config/secrets.env")
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# ✅ Robust API key setup: works on Streamlit Cloud and locally
+openai.api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
 
 st.set_page_config(page_title="SustainaScan | Dashboard", layout="wide")
 
@@ -25,12 +23,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Logo
-logo_path = "./data/Greeco_logo.png"
+logo_path = "./Greeco_logo_1.png"
 if os.path.exists(logo_path):
     logo = Image.open(logo_path)
     st.image(logo, width=180)
 
-st.title("📊 SustainaScan | Lead Dashboard")
+st.title("SustainaScan | Lead Dashboard")
 st.markdown("Filter, view, and connect with your eco-minded audience below.")
 
 # Data paths
