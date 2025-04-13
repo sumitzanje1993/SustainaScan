@@ -8,10 +8,12 @@ from contact_extractor import enrich_contacts
 
 OUTPUT_FILE = "./data/instagram_raw_leads.json"
 
-def check_login_only(user: str, pwd: str):
+def check_login_only(user: str, pwd: str, twofa_code: str = None):
     L = instaloader.Instaloader()
     try:
         L.login(user, pwd)
+        if twofa_code:
+            L.context.do_2fa_verification(twofa_code)
         return "LOGIN_SUCCESS"
     except instaloader.exceptions.TwoFactorAuthRequiredException:
         return "2FA_REQUIRED"
@@ -22,14 +24,13 @@ def scrape_followers_of_account(target_username, max_users, login_user, login_pa
     L = instaloader.Instaloader()
 
     try:
-        if twofa_code:
-            # Inject 2FA handler into instaloader's input system
-            instaloader.TwoFactorAuthRequester.input = lambda self, prompt: twofa_code
-
         L.login(login_user, login_pass)
-
+        if twofa_code:
+            L.context.do_2fa_verification(twofa_code)
     except instaloader.exceptions.TwoFactorAuthRequiredException:
         raise Exception("2FA_REQUIRED")
+    except instaloader.exceptions.BadCredentialsException:
+        raise Exception("LOGIN_FAILED: Bad username or password.")
     except Exception as e:
         raise Exception(f"LOGIN_FAILED: {e}")
 
